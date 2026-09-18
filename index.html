@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Withdrawal</title>
+    <style>
+        /* 色だけがブランドごとに変わる。骨格はAxis3本・空手1本と共通 */
+        :root {
+            --accent: #53c6ee;        /* RunFit ブルー（runfit24/style.css 実測） */
+            --accent-strong: #0a2439; /* 同 --deep */
+            --on-accent: #0a2439;     /* ボタン文字：#53c6ee上で8.4:1 */
+            --page: #eefaff;          /* 同 --pale */
+            --card: #fff;
+            --ink: #132a3b;           /* 同 --ink */
+            --line: #c7e4ee;          /* 同 --line */
+        }
+
+        body { font-family: -apple-system, sans-serif; padding: 20px; background-color: var(--page); color: var(--ink); line-height: 1.6; }
+        .container { background: var(--card); padding: 25px 20px; border-radius: 15px; max-width: 450px; margin: auto; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
+        h2 { font-size: 18px; text-align: center; color: var(--accent-strong); border-bottom: 3px solid var(--accent); padding-bottom: 12px; margin-bottom: 25px; margin-top: 0; }
+
+        .form-group { margin-bottom: 18px; text-align: left; }
+        label { display: block; font-weight: bold; margin-bottom: 6px; font-size: 14px; text-align: left; }
+
+        input, select, textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 10px; box-sizing: border-box; font-size: 16px; background-color: #fafafa; font-family: inherit; resize: none; }
+
+        textarea { height: 110px; }
+
+        .note-required { font-size: 11px; color: #d00; margin-top: 5px; font-weight: bold; }
+
+        .info-box { background: #f5fcff; padding: 15px; border-radius: 10px; border: 1px solid var(--line); margin-top: 20px; margin-bottom: 10px; font-size: 13px; line-height: 1.7; }
+        .info-title { display: block; font-weight: bold; color: var(--accent-strong); margin-bottom: 10px; }
+
+        .schedule-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 13px; }
+        .schedule-table th, .schedule-table td { padding: 7px 4px; border-bottom: 1px solid var(--line); text-align: left; }
+        .schedule-table th { width: 47%; font-weight: bold; white-space: nowrap; }
+        .highlight-date { font-weight: bold; color: var(--accent-strong); }
+
+        .card-keep { background: #fff; padding: 11px 12px; border-radius: 8px; border: 1px solid var(--line); margin-top: 12px; font-size: 12px; line-height: 1.7; }
+        .card-keep b { color: var(--accent-strong); }
+
+        .btn { background-color: var(--accent); color: var(--on-accent); border: none; padding: 18px; width: 100%; border-radius: 10px; font-size: 18px; font-weight: bold; cursor: pointer; transition: 0.3s; margin-top: 10px; }
+        .btn:disabled { background-color: #ccc !important; color: #fff !important; cursor: not-allowed; opacity: 0.6; }
+
+        .footer-text { font-size: 12px; text-align: center; margin-top: 20px; color: #000; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>【退会連絡フォーム】</h2>
+
+    <div class="form-group">
+        <label>① お名前</label>
+        <input type="text" id="name" placeholder="氏名を入力" oninput="validateForm()">
+    </div>
+
+    <div class="form-group">
+        <label>② 会員番号</label>
+        <input type="number" id="memberId" placeholder="会員番号（数字のみ）" oninput="validateForm()">
+        <p class="note-required">※本人確認とカード照合に必須です。</p>
+    </div>
+
+    <div class="form-group">
+        <label>③ 備考（任意）</label>
+        <textarea id="notes" placeholder="家族で入会している場合は退会する方全員をご記入ください" oninput="validateForm()"></textarea>
+    </div>
+
+    <div class="info-box">
+        <span class="info-title">この後の手続きについて</span>
+
+        <table class="schedule-table">
+            <tr>
+                <th>本日（ご連絡日）</th>
+                <td id="todayStr"></td>
+            </tr>
+            <tr>
+                <th>退会連絡の締切</th>
+                <td id="deadlineDate" class="highlight-date"></td>
+            </tr>
+            <tr>
+                <th>最終利用可能日</th>
+                <td id="limitDate" class="highlight-date"></td>
+            </tr>
+        </table>
+
+        毎月10日までにご連絡いただくと、その月いっぱいでのお手続きとなります。10日を過ぎた場合は、翌月10日のお取り扱いとなります。
+
+        <div class="card-keep">
+            <b>会員カードはそのままお持ちください。</b><br>
+            再入会の際に入会金などがかからず、そのまま始めていただけます。
+        </div>
+    </div>
+
+    <button id="submitBtn" class="btn" onclick="sendData()" disabled>送信する</button>
+    <div class="footer-text">
+        内容を確認次第、スタッフより順次返信いたします。
+    </div>
+</div>
+
+<script>
+    const LINE_OFFICIAL_ID = "@040tbzgk";
+
+    let g_deadline = "";
+    let g_limit = "";
+
+    // 10日締め。10日を過ぎていたら翌月10日の扱いになり、その月いっぱいまで使える。
+    function calculateSchedule() {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth() + 1;
+        const day = now.getDate();
+
+        document.getElementById('todayStr').innerText = `${year}年${month}月${day}日`;
+
+        let targetYear = year;
+        let targetMonth = month;
+        if (day > 10) {
+            targetMonth = month + 1;
+            if (targetMonth > 12) { targetMonth -= 12; targetYear += 1; }
+        }
+
+        const lastDay = new Date(targetYear, targetMonth, 0).getDate();
+
+        // 年は、またぐ時だけ書く。常に書くと375px幅で「10日ま／で」と割れ、
+        // 省くと12月→1月がどちらの年か分からなくなる。割れる時だけ足す。
+        const yearPrefix = (targetYear !== year) ? `${targetYear}年` : '';
+
+        g_deadline = `${yearPrefix}${targetMonth}月10日まで`;
+        g_limit = `${yearPrefix}${targetMonth}月${lastDay}日`;
+
+        document.getElementById('deadlineDate').innerText = g_deadline;
+        document.getElementById('limitDate').innerText = g_limit;
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        calculateSchedule();
+        validateForm();
+    });
+
+    function validateForm() {
+        const name = document.getElementById('name').value.trim();
+        const memberId = document.getElementById('memberId').value.trim();
+        document.getElementById('submitBtn').disabled = !(name && memberId);
+    }
+
+    function sendData() {
+        const notes = document.getElementById('notes').value.trim() || "なし";
+        const msg = "【退会連絡】\n" +
+            "■名前：" + document.getElementById('name').value + "様\n" +
+            "■番号：" + document.getElementById('memberId').value + "\n" +
+            "■備考：" + notes + "\n" +
+            "■退会連絡の締切：" + g_deadline + "\n" +
+            "■最終利用可能日：" + g_limit;
+
+        window.location.href = "https://line.me/R/oaMessage/" + encodeURIComponent(LINE_OFFICIAL_ID) + "/?" + encodeURIComponent(msg);
+    }
+</script>
+</body>
+</html>
